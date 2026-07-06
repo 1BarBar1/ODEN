@@ -3,24 +3,21 @@ from sensor_msgs.msg import PointCloud2
 import rclpy
 import numpy as np
 
+
 class PointCloudPublisher(Node):
-    def __init__(self, topic_name='points'):
-        super().__init__('pointcloud_publisher')
+    def __init__(self, topic_name="points"):
+        super().__init__("pointcloud_publisher")
         self.publisher = self.create_publisher(PointCloud2, topic_name, 10)
 
     def create_pointcloud2(self, points, frame):
         from sensor_msgs.msg import PointField
         from std_msgs.msg import Header
-        '''
-        print("points type:", type(points))
-        print("points shape:", points.shape)
-        print("points ndim:", points.ndim)
-        '''
 
+        # 1. CHANGE THIS to expect 4 columns (x, y, z, class)
         assert points.ndim == 2 and points.shape[1] == 4
+
         points = np.asarray(points, dtype=np.float32)
         points = np.ascontiguousarray(points)
-        #points = np.ascontiguousarray(points, dtype=np.float32)
 
         msg = PointCloud2()
         msg.header = Header()
@@ -30,11 +27,12 @@ class PointCloudPublisher(Node):
         msg.height = 1
         msg.width = points.shape[0]
 
+        # 4 fields * 4 bytes = 16 bytes per point
         msg.fields = [
-            PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
-            PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
-            PointField(name='z', offset=8, datatype=PointField.FLOAT32, count=1),
-            PointField(name='class', offset=12, datatype=PointField.FLOAT32, count=1),
+            PointField(name="x", offset=0, datatype=PointField.FLOAT32, count=1),
+            PointField(name="y", offset=4, datatype=PointField.FLOAT32, count=1),
+            PointField(name="z", offset=8, datatype=PointField.FLOAT32, count=1),
+            PointField(name="class", offset=12, datatype=PointField.FLOAT32, count=1),
         ]
 
         msg.is_bigendian = False
@@ -45,4 +43,3 @@ class PointCloudPublisher(Node):
         msg.data = points.tobytes()
 
         return msg
-

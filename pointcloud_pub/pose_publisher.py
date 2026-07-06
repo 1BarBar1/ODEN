@@ -7,8 +7,8 @@ from std_msgs.msg import Header
 
 
 class PosePublisher(Node):
-    def __init__(self, topic_name='poses'):
-        super().__init__('pose_publisher')
+    def __init__(self, topic_name="poses"):
+        super().__init__("pose_publisher")
         self.publisher = self.create_publisher(PoseArray, topic_name, 10)
 
     def create_pose_array(self, points, frame):
@@ -17,9 +17,10 @@ class PosePublisher(Node):
         columns: [x,y,z,(optional class)]
         """
 
+        print("values of centroids:", points.values())
 
         # Ensure points is a 2D array
-        points = np.asarray(points, dtype=np.float32)
+        points = np.asarray(list(points.values()), dtype=np.float32)
         assert points.ndim == 2, f"points must be 2D, got {points.ndim}D"
 
         msg = PoseArray()
