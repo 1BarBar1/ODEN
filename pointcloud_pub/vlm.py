@@ -82,27 +82,27 @@ class YoloSamCombo:
         if len(boxes) > 0:
             print(f"Found {len(boxes)} objects! Generating crisp masks...")
 
-            # Step B: Feed those exact boxes into SAM
+            # Feed those exact boxes into SAM
             seg_results = self.segmenter.predict(input, bboxes=boxes, device="cpu")
 
             if seg_results[0].masks is not None:
-                # 1. Get the original camera image dimensions (Height, Width)
+                #cGet the original camera image dimensions (Height, Width)
                 orig_h, orig_w = seg_results[0].orig_shape
 
-                # 2. Extract the raw mask tensors and move them to CPU -> NumPy
+                # Extract the raw mask tensors and move them to CPU -> NumPy
                 # Shape is (N, H, W) where N is number of detected objects
                 raw_masks = seg_results[0].masks.data.cpu().numpy()
 
-                # 3. Grab the mask for the first detected object (e.g., the hammer)
+                # Grab the mask for the first detected object (e.g., the hammer)
                 first_tool_mask = raw_masks[0]
 
-                # 4. Resize the mask back to the original camera resolution
+                # Resize the mask back to the original camera resolution
                 # CRITICAL: Use INTER_NEAREST so the edges stay strictly 0 or 1, without blurry gradients
                 full_res_mask = cv2.resize(
                     first_tool_mask, (orig_w, orig_h), interpolation=cv2.INTER_NEAREST
                 )
 
-                # 5. Convert to a strict Boolean array for indexing
+                # Convert to a strict Boolean array for indexing
                 boolean_mask = full_res_mask > 0.5
 
                 print(

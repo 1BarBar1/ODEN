@@ -1,7 +1,5 @@
 from pointcloud_pub.vlm import Clipseg, YoloSamCombo, Yolo26e
 import numpy as np
-import math
-import time
 from pointcloud_pub.pointcloud_publisher import PointCloudPublisher
 from pointcloud_pub.pose_publisher import PosePublisher
 from message_filters import Subscriber, ApproximateTimeSynchronizer
@@ -16,15 +14,20 @@ import open3d as o3d
 
 
 class ProcessingNode(Node):
-    def __init__(self, seg_human, seg_obstacle):
+    def __init__(self, seg_grasping_object, seg_obstacle):
         super().__init__("processing_node")
         print("Processing node initialized")
-        self.seg_human = seg_human
+        self.seg_grasping_object = seg_grasping_object
         self.seg_obstacle = seg_obstacle
         self.bridge = CvBridge()
-        self.pc_human_pub = PointCloudPublisher(topic_name="object")
-        self.pc_environment_pub = PointCloudPublisher(topic_name="environment")
-        self.po_pub = PosePublisher()
+
+        self.pc_grasping_object_pub = PointCloudPublisher(
+            node=self, topic_name="object"
+        )
+        self.pc_environment_pub = PointCloudPublisher(
+            node=self, topic_name="environment"
+        )
+        self.po_pub = PosePublisher(node=self)
         self.K = None
 
         self.frame = "camera_color_optical_frame"
@@ -82,38 +85,40 @@ class ProcessingNode(Node):
             )
 
     def extract_point_clouds(
-        self, depth_image, mask_human, cx, cy, fx, fy, bbox_padding=0.05
+        self, depth_image, mask_grasping_object, cx, cy, fx, fy, bbox_padding=0.05
     ):
         # Ensure mask is boolean for easy logic
-        mask_human = np.asarray(mask_human, dtype=bool)
+        mask_grasping_object = np.asarray(mask_grasping_object, dtype=bool)
 
-        if mask_human.size == 0 or not np.any(mask_human):
-            print("Warning: No mask found for human segmentation.")
+        if mask_grasping_object.size == 0 or not np.any(mask_grasping_object):
+            print("Warning: No mask found for grasping_object segmentation.")
             return np.array([]), np.array([])
-        # 1. Create a grid of all (u, v) pixel coordinates
+        # Create a grid of all (u, v) pixel coordinates
         h, w = depth_image.shape
         u, v = np.meshgrid(np.arange(w), np.arange(h))
 
-        # 2. Convert the entire depth image to meters at once
+        # Convert the entire depth image to meters at once
         Z = depth_image / 1000.0
 
-        # 3. Create a mask to filter out invalid depths (Z <= 0 or Z > 6.0)
+        # Create a mask to filter out invalid depths (Z <= 0 or Z > 6.0)
         valid_depth = (Z > 0) & (Z <= 6.0)
 
-        # 4. Calculate X and Y for the entire image simultaneously
+        # Calculate X and Y for the entire image simultaneously
         X = (u - cx) * Z / fx
         Y = (v - cy) * Z / fy
 
-        # 5. Stack X, Y, Z into a single 3D array of shape (H, W, 3)
+        # Stack X, Y, Z into a single 3D array of shape (H, W, 3)
         point_cloud = np.dstack((X, Y, Z))
 
-        # 6. Combine the valid depth mask with your human/environment masks
+        # Combine the valid depth mask with your grasping_object/environment masks
         # Using bitwise '&' to combine boolean conditions
-        human_mask = valid_depth & mask_human
-        env_mask = valid_depth & ~mask_human  # ~ inverts the boolean mask (gets the 0s)
+        grasping_object_mask = valid_depth & mask_grasping_object
+        env_mask = (
+            valid_depth & ~mask_grasping_object
+        )  # ~ inverts the boolean mask (gets the 0s)
 
-        # 7. Extract the valid points into flat lists/arrays of shape (N, 3)
-        mask_points = point_cloud[human_mask]
+        # Extract the valid points into flat lists/arrays of shape (N, 3)
+        mask_points = point_cloud[grasping_object_mask]
         environment = point_cloud[env_mask]
         if mask_points.size > 0:
             # Calculate the min and max X, Y, Z coordinates to form the bounding box
@@ -153,52 +158,51 @@ class ProcessingNode(Node):
         cx = self.K[0, 2]
         cy = self.K[1, 2]
 
-        if self.seg_human:
+        if self.seg_grasping_object:
             mask_points = []
             environment = []
-            mask_human = self.seg_human.get_segmentation(color_frame)
-            mask_human = np.asarray(mask_human, dtype=bool)
+            mask_grasping_object = self.seg_grasping_object.get_segmentation(
+                color_frame
+            )
+            mask_grasping_object = np.asarray(mask_grasping_object, dtype=bool)
             mask_points, environment_np = self.extract_point_clouds(
-                depth_image, mask_human, cx, cy, fx, fy
+                depth_image, mask_grasping_object, cx, cy, fx, fy
             )
 
             try:
                 if environment_np.size == 0:
-                    print("Warning: No points found for human segmentation.")
+                    print("Warning: No points found for grasping_object segmentation.")
                     return
                 environment = o3d.geometry.PointCloud()
                 environment.points = o3d.utility.Vector3dVector(environment_np)
 
-                # 3. Now perform the processing
                 voxel_size = 0.01
                 # environment = environment.voxel_down_sample(voxel_size)
-                human = np.asarray(mask_points)
+                grasping_object = np.asarray(mask_points)
 
-                human_np = np.asarray(mask_points)
-                if human_np.size == 0:
-                    print("Warning: No points found for human segmentation.")
+                grasping_object_np = np.asarray(mask_points)
+                if grasping_object_np.size == 0:
+                    print("Warning: No points found for grasping_object segmentation.")
                     return
-                # 2. Create the Open3D object and assign the points
-                human = o3d.geometry.PointCloud()
-                human.points = o3d.utility.Vector3dVector(human_np)
 
-                # 3. Now perform the processing
+                grasping_object = o3d.geometry.PointCloud()
+                grasping_object.points = o3d.utility.Vector3dVector(grasping_object_np)
+
                 voxel_size = 0.01
-                human = human.voxel_down_sample(voxel_size)
+                grasping_object = grasping_object.voxel_down_sample(voxel_size)
 
                 # Check if points exist before clustering to avoid the crash
-                if len(human.points) == 0:
+                if len(grasping_object.points) == 0:
                     print("Warning: Point cloud empty after downsampling.")
                 else:
                     eps = 0.05  # 5 centimeters
                     min_points = 10
                     labels = np.array(
-                        human.cluster_dbscan(
+                        grasping_object.cluster_dbscan(
                             eps=eps, min_points=min_points, print_progress=False
                         )
                     )
 
-                    # 4. Find the Centroid of Each Cluster
                     # Labels of -1 represent noise points that do not belong to any cluster
                     print(labels)
                     max_label = labels.max()
@@ -211,7 +215,7 @@ class ProcessingNode(Node):
                         cluster_indices = np.where(labels == cluster_id)[0]
 
                         # Slice the downsampled point cloud to isolate the cluster geometry
-                        cluster_pcd = human.select_by_index(cluster_indices)
+                        cluster_pcd = grasping_object.select_by_index(cluster_indices)
 
                         # Method A: Use Open3D's built-in center calculation
                         # centroid = cluster_pcd.get_center()
@@ -224,23 +228,27 @@ class ProcessingNode(Node):
                         print(
                             f"Cluster {cluster_id}: Points = {len(cluster_indices)} | Centroid = {centroid}"
                         )
-                    human_array = np.asarray(human.points)
-                    human_array = np.column_stack(
-                        (human_np, np.ones(human_np.shape[0]))
+                    grasping_object_array = np.asarray(grasping_object.points)
+                    grasping_object_array = np.column_stack(
+                        (grasping_object_np, np.ones(grasping_object_np.shape[0]))
                     )
                     environment_array = np.asarray(environment.points)
                     environment_array = np.column_stack(
                         (environment_array, np.ones(environment_array.shape[0]))
                     )
 
-                    if len(human.points) > 0:
+                    if len(grasping_object.points) > 0:
                         self.get_logger().info(
-                            f"Publishing human point cloud with {human_array.shape[0]} points."
+                            f"Publishing grasping_object point cloud with {grasping_object_array.shape[0]} points."
                         )
-                        msg_human = self.pc_human_pub.create_pointcloud2(
-                            human_array, self.frame
+                        msg_grasping_object = (
+                            self.pc_grasping_object_pub.create_pointcloud2(
+                                grasping_object_array, self.frame
+                            )
                         )
-                        self.pc_human_pub.publisher.publish(msg_human)
+                        self.pc_grasping_object_pub.publisher.publish(
+                            msg_grasping_object
+                        )
                     if environment_array.size > 0:
                         self.get_logger().info(
                             f"Publishing environment point cloud with {environment_array.shape[0]} points."
@@ -252,7 +260,7 @@ class ProcessingNode(Node):
                     if len(centroids) > 0:
                         msg_pose = self.po_pub.create_pose_array(centroids, self.frame)
                         self.po_pub.publisher.publish(msg_pose)
-            except OverflowError as e:
+            except Exception as e:
                 print("mask error")
 
         self.color_frame = None
@@ -261,24 +269,17 @@ class ProcessingNode(Node):
 
 def main(args=None):
     print("Starting processing node...")
-    track_obs = False
-    if track_obs:
-        # Clipseg(prompts=["human"])
-        seg_human = None
-        seg_obstacle = Clipseg(["obstacle"])
-    else:
-        seg_human = YoloSamCombo(["brick", "object", "tool", "box", ""])
-        seg_obstacle = None
+
+    seg_grasping_object = YoloSamCombo(["brick", "object", "tool", "box", ""])
+    seg_obstacle = None
 
     rclpy.init(args=args)
-    node = ProcessingNode(seg_human, seg_obstacle)
+    node = ProcessingNode(seg_grasping_object, seg_obstacle)
 
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
     finally:
-        node.pc_human_pub.destroy_node()
-        node.pc_environment_pub.destroy_node()
         node.destroy_node()
         rclpy.shutdown()

@@ -7,9 +7,8 @@ from std_msgs.msg import Header
 
 
 class PosePublisher(Node):
-    def __init__(self, topic_name="poses"):
-        super().__init__("pose_publisher")
-        self.publisher = self.create_publisher(PoseArray, topic_name, 10)
+    def __init__(self, node):
+        self.publisher = node.create_publisher(PoseArray, 'pose_topic', 10)
 
     def create_pose_array(self, points, frame):
         """

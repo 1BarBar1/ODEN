@@ -5,9 +5,8 @@ import numpy as np
 
 
 class PointCloudPublisher(Node):
-    def __init__(self, topic_name="points"):
-        super().__init__("pointcloud_publisher")
-        self.publisher = self.create_publisher(PointCloud2, topic_name, 10)
+    def __init__(self, node: Node, topic_name: str):
+        self.publisher = node.create_publisher(PointCloud2, topic_name, 10)
 
     def create_pointcloud2(self, points, frame):
         from sensor_msgs.msg import PointField
