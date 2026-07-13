@@ -22,12 +22,12 @@ class ProcessingNode(Node):
         self.seg_human = seg_human
         self.seg_obstacle = seg_obstacle
         self.bridge = CvBridge()
-        self.pc_human_pub = PointCloudPublisher(topic_name="human")
-        self.pc_obstacle_pub = PointCloudPublisher(topic_name="obstacle")
+        self.pc_human_pub = PointCloudPublisher(topic_name="object")
+        self.pc_environment_pub = PointCloudPublisher(topic_name="environment")
         self.po_pub = PosePublisher()
         self.K = None
 
-        self.frame = "camera1_depth_optical_frame"
+        self.frame = "camera_color_optical_frame"
 
         self.color_frame = None
         self.depth_frame = None
@@ -81,42 +81,67 @@ class ProcessingNode(Node):
                 "Camera info already received, ignoring further messages"
             )
 
-    def transformation(self, points):
+    def extract_point_clouds(
+        self, depth_image, mask_human, cx, cy, fx, fy, bbox_padding=0.05
+    ):
+        # Ensure mask is boolean for easy logic
+        mask_human = np.asarray(mask_human, dtype=bool)
 
-        xyz = points[:, :3]  # spatial coordinates
-        classes = points[:, 3]  # class labels
+        if mask_human.size == 0 or not np.any(mask_human):
+            print("Warning: No mask found for human segmentation.")
+            return np.array([]), np.array([])
+        # 1. Create a grid of all (u, v) pixel coordinates
+        h, w = depth_image.shape
+        u, v = np.meshgrid(np.arange(w), np.arange(h))
 
-        # --- Rotation Z (90°)
-        a = math.radians(-90)
-        Rz = np.array(
-            [[math.cos(a), -math.sin(a), 0], [math.sin(a), math.cos(a), 0], [0, 0, 1]]
-        )
+        # 2. Convert the entire depth image to meters at once
+        Z = depth_image / 1000.0
 
-        # --- Rotation Y (90°)
-        a = math.radians(90)
-        Ry1 = np.array(
-            [[math.cos(a), 0, math.sin(a)], [0, 1, 0], [-math.sin(a), 0, math.cos(a)]]
-        )
+        # 3. Create a mask to filter out invalid depths (Z <= 0 or Z > 6.0)
+        valid_depth = (Z > 0) & (Z <= 6.0)
 
-        # --- Rotation Y (42°)
-        a = math.radians(50)
-        Ry2 = np.array(
-            [[math.cos(a), 0, math.sin(a)], [0, 1, 0], [-math.sin(a), 0, math.cos(a)]]
-        )
+        # 4. Calculate X and Y for the entire image simultaneously
+        X = (u - cx) * Z / fx
+        Y = (v - cy) * Z / fy
 
-        rotated = xyz @ Rz.T
-        rotated = rotated @ Ry1.T
-        rotated = rotated @ Ry2.T
+        # 5. Stack X, Y, Z into a single 3D array of shape (H, W, 3)
+        point_cloud = np.dstack((X, Y, Z))
 
-        rotated[:, 2] += 1.2
+        # 6. Combine the valid depth mask with your human/environment masks
+        # Using bitwise '&' to combine boolean conditions
+        human_mask = valid_depth & mask_human
+        env_mask = valid_depth & ~mask_human  # ~ inverts the boolean mask (gets the 0s)
 
-        return np.column_stack((rotated, classes))
+        # 7. Extract the valid points into flat lists/arrays of shape (N, 3)
+        mask_points = point_cloud[human_mask]
+        environment = point_cloud[env_mask]
+        if mask_points.size > 0:
+            # Calculate the min and max X, Y, Z coordinates to form the bounding box
+            # Subtract/add padding to expand the box slightly
+            min_bounds = np.min(mask_points, axis=0) - bbox_padding
+            max_bounds = np.max(mask_points, axis=0) + bbox_padding
+
+            # Find which environment points fall INSIDE this 3D bounding box
+            # environment[:, 0] is X, environment[:, 1] is Y, environment[:, 2] is Z
+            inside_bbox = (
+                (environment[:, 0] >= min_bounds[0])
+                & (environment[:, 0] <= max_bounds[0])
+                & (environment[:, 1] >= min_bounds[1])
+                & (environment[:, 1] <= max_bounds[1])
+                & (environment[:, 2] >= min_bounds[2])
+                & (environment[:, 2] <= max_bounds[2])
+            )
+
+            # Use the bitwise NOT operator (~) to keep only the points OUTSIDE the bounding box
+            environment = environment[~inside_bbox]
+
+        return mask_points, environment
 
     def synced_cb(self, color_msg, depth_msg):
         if self.K is None:
             print("no K")
             return
-        print("Processing synchronized color and depth frames")
+        # print("Processing synchronized color and depth frames")
         color_frame = self.bridge.imgmsg_to_cv2(color_msg, desired_encoding="bgr8")
         depth_frame = self.bridge.imgmsg_to_cv2(
             depth_msg, desired_encoding="passthrough"
@@ -130,27 +155,23 @@ class ProcessingNode(Node):
 
         if self.seg_human:
             mask_points = []
+            environment = []
             mask_human = self.seg_human.get_segmentation(color_frame)
             mask_human = np.asarray(mask_human, dtype=bool)
-            if mask_human.size == 0:
-                print("Warning: No mask found for human segmentation.")
-                return
-            print(f"Mask shape: {mask_human.shape}, dtype: {mask_human.dtype}")
-            print(mask_human)
-            ys, xs = np.where(mask_human > 0.05)
+            mask_points, environment_np = self.extract_point_clouds(
+                depth_image, mask_human, cx, cy, fx, fy
+            )
 
-            for v, u in zip(ys, xs):
-                Z = depth_image[v, u] / 1000.0
-                if Z <= 0:
-                    continue
-                if Z > 6.0:
-                    continue
-
-                X = (u - cx) * Z / fx
-                Y = (v - cy) * Z / fy
-
-                mask_points.append([X, Y, Z])
             try:
+                if environment_np.size == 0:
+                    print("Warning: No points found for human segmentation.")
+                    return
+                environment = o3d.geometry.PointCloud()
+                environment.points = o3d.utility.Vector3dVector(environment_np)
+
+                # 3. Now perform the processing
+                voxel_size = 0.01
+                # environment = environment.voxel_down_sample(voxel_size)
                 human = np.asarray(mask_points)
 
                 human_np = np.asarray(mask_points)
@@ -162,7 +183,7 @@ class ProcessingNode(Node):
                 human.points = o3d.utility.Vector3dVector(human_np)
 
                 # 3. Now perform the processing
-                voxel_size = 0.05
+                voxel_size = 0.01
                 human = human.voxel_down_sample(voxel_size)
 
                 # Check if points exist before clustering to avoid the crash
@@ -170,7 +191,7 @@ class ProcessingNode(Node):
                     print("Warning: Point cloud empty after downsampling.")
                 else:
                     eps = 0.05  # 5 centimeters
-                    min_points = 5
+                    min_points = 10
                     labels = np.array(
                         human.cluster_dbscan(
                             eps=eps, min_points=min_points, print_progress=False
@@ -193,11 +214,11 @@ class ProcessingNode(Node):
                         cluster_pcd = human.select_by_index(cluster_indices)
 
                         # Method A: Use Open3D's built-in center calculation
-                        centroid = cluster_pcd.get_center()
+                        # centroid = cluster_pcd.get_center()
 
                         # Method B: Direct mathematical mean via NumPy (Alternative)
-                        # cluster_points = np.asarray(cluster_pcd.points)
-                        # centroid = cluster_points.mean(axis=0)
+                        cluster_points = np.asarray(cluster_pcd.points)
+                        centroid = cluster_points.mean(axis=0)
 
                         centroids[cluster_id] = centroid
                         print(
@@ -207,51 +228,31 @@ class ProcessingNode(Node):
                     human_array = np.column_stack(
                         (human_np, np.ones(human_np.shape[0]))
                     )
-                    print("human_array shape:", human_array.shape)
-                    # centroid_transformed = self.transformation(centroids)
-                    # human = self.transformation(np.asarray(human.points))
+                    environment_array = np.asarray(environment.points)
+                    environment_array = np.column_stack(
+                        (environment_array, np.ones(environment_array.shape[0]))
+                    )
 
                     if len(human.points) > 0:
+                        self.get_logger().info(
+                            f"Publishing human point cloud with {human_array.shape[0]} points."
+                        )
                         msg_human = self.pc_human_pub.create_pointcloud2(
                             human_array, self.frame
                         )
                         self.pc_human_pub.publisher.publish(msg_human)
+                    if environment_array.size > 0:
+                        self.get_logger().info(
+                            f"Publishing environment point cloud with {environment_array.shape[0]} points."
+                        )
+                        msg_env = self.pc_environment_pub.create_pointcloud2(
+                            environment_array, self.frame
+                        )
+                        self.pc_environment_pub.publisher.publish(msg_env)
                     if len(centroids) > 0:
                         msg_pose = self.po_pub.create_pose_array(centroids, self.frame)
                         self.po_pub.publisher.publish(msg_pose)
             except OverflowError as e:
-                print("mask error")
-
-        # start = time.time()
-        if self.seg_obstacle:
-            mask_points = []
-
-            mask_obstacle, logits = self.seg_obstacle.get_segmentation(color_frame)
-            conf_obstacle = mask_obstacle.max(axis=0)
-
-            ys, xs = np.where(conf_obstacle > 0.08)
-            # start1 = time.time()
-            for v, u in zip(ys, xs):
-                Z = depth_image[v, u] / 1000.0
-                if Z <= 0:
-                    continue
-                if Z > 3.0:
-                    continue
-
-                X = (u - cx) * Z / fx
-                Y = (v - cy) * Z / fy
-
-                mask_points.append([X, Y, Z, 1])
-            try:
-                mask_points = np.asarray(mask_points)
-                obstacle = mask_points[mask_points[:, 3] == 1]
-                # obstacle = transformation(obstacle)
-                if obstacle.size > 0:
-                    msg_obs = self.pc_obstacle_pub.create_pointcloud2(
-                        obstacle, self.frame
-                    )
-                    self.pc_obstacle_pub.publisher.publish(msg_obs)
-            except (IndexError, ValueError):
                 print("mask error")
 
         self.color_frame = None
@@ -266,7 +267,7 @@ def main(args=None):
         seg_human = None
         seg_obstacle = Clipseg(["obstacle"])
     else:
-        seg_human = YoloSamCombo(["hammer", ""])
+        seg_human = YoloSamCombo(["brick", "object", "tool", "box", ""])
         seg_obstacle = None
 
     rclpy.init(args=args)
@@ -278,6 +279,6 @@ def main(args=None):
         pass
     finally:
         node.pc_human_pub.destroy_node()
-        node.pc_obstacle_pub.destroy_node()
+        node.pc_environment_pub.destroy_node()
         node.destroy_node()
         rclpy.shutdown()

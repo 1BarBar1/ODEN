@@ -7,7 +7,8 @@ from ultralytics import YOLOWorld, SAM, YOLO
 from PIL import Image
 import cv2
 import requests
-from transformers import AutoProcessor, AutoModelForVision2Seq
+
+# from transformers import AutoProcessor, AutoModelForVision2Seq
 import torch
 
 # import matplotlib.pyplot as plt
@@ -147,72 +148,72 @@ class Yolo26e:
             return []  # Return the original image if no tools are found
 
 
-class YoloVlmSam:
-    def __init__(self, prompts=["hammer"]):
+# class YoloVlmSam:
+#     def __init__(self, prompts=["hammer"]):
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(device)
+#         device = "cuda" if torch.cuda.is_available() else "cpu"
+#         print(device)
 
-        self.vlm_processor = AutoProcessor.from_pretrained(
-            "HuggingFaceTB/SmolVLM-Instruct"
-        )
-        self.vlm_model = AutoModelForVision2Seq.from_pretrained(
-            "HuggingFaceTB/SmolVLM-Instruct",
-            torch_dtype=torch.bfloat16,
-            _attn_implementation="flash_attention_2" if device == "cuda" else "eager",
-        ).to(device)
+#         self.vlm_processor = AutoProcessor.from_pretrained(
+#             "HuggingFaceTB/SmolVLM-Instruct"
+#         )
+#         self.vlm_model = AutoModelForVision2Seq.from_pretrained(
+#             "HuggingFaceTB/SmolVLM-Instruct",
+#             torch_dtype=torch.bfloat16,
+#             _attn_implementation="flash_attention_2" if device == "cuda" else "eager",
+#         ).to(device)
 
-        # Load the lightweight YOLOE-26 segmentation model
-        self.yolo_model = YOLO("yolo26n.pt")
+#         # Load the lightweight YOLOE-26 segmentation model
+#         self.yolo_model = YOLO("yolo26n.pt")
 
-        self.segmenter = SAM(
-            "/home/rosdev/ros2_ws/src/R7018E/pointcloud_pub/models/mobile_sam.pt"
-        )
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image"},
-                    {
-                        "type": "text",
-                        "text": "Please give the index objects in the image that matches the following description: "
-                        + prompts,
-                    },
-                ],
-            },
-        ]
-        self.prompt = self.processor.apply_chat_template(
-            messages, add_generation_prompt=True
-        )
-        # Predict on the image (returns bounding boxes AND masks simultaneously)
+#         self.segmenter = SAM(
+#             "/home/rosdev/ros2_ws/src/R7018E/pointcloud_pub/models/mobile_sam.pt"
+#         )
+#         messages = [
+#             {
+#                 "role": "user",
+#                 "content": [
+#                     {"type": "image"},
+#                     {
+#                         "type": "text",
+#                         "text": "Please give the index objects in the image that matches the following description: "
+#                         + prompts,
+#                     },
+#                 ],
+#             },
+#         ]
+#         self.prompt = self.processor.apply_chat_template(
+#             messages, add_generation_prompt=True
+#         )
+#         # Predict on the image (returns bounding boxes AND masks simultaneously)
 
-    def get_segmentation(self, input):
+#     def get_segmentation(self, input):
 
-        det_results = self.yolo_model.predict(input, conf=0.01, device=self.device)
-        boxes = det_results[0].boxes.xyxy
-        print(f"Detected {len(boxes)} objects with YOLOv8!")
-        vlm_inputs = self.vlm_processor(
-            text=self.prompt, images=[boxes[0]], return_tensors="pt"
-        )
-        vlm_inputs = vlm_inputs.to(self.device)
-        generated_ids = self.vlm_model.generate(**vlm_inputs, max_new_tokens=500)
-        generated_texts = self.vlm_processor.batch_decode(
-            generated_ids,
-            skip_special_tokens=True,
-        )
+#         det_results = self.yolo_model.predict(input, conf=0.01, device=self.device)
+#         boxes = det_results[0].boxes.xyxy
+#         print(f"Detected {len(boxes)} objects with YOLOv8!")
+#         vlm_inputs = self.vlm_processor(
+#             text=self.prompt, images=[boxes[0]], return_tensors="pt"
+#         )
+#         vlm_inputs = vlm_inputs.to(self.device)
+#         generated_ids = self.vlm_model.generate(**vlm_inputs, max_new_tokens=500)
+#         generated_texts = self.vlm_processor.batch_decode(
+#             generated_ids,
+#             skip_special_tokens=True,
+#         )
 
-        print(generated_texts[0])
+#         print(generated_texts[0])
 
-        results = self.model.predict(input, conf=0.01)
+#         results = self.model.predict(input, conf=0.01)
 
-        # Extract the binary masks directly for your 3D point cloud
-        if results[0].masks is not None:
-            # Get the raw mask tensors and convert to a NumPy array
-            raw_masks = results[0].masks.data.cpu().numpy()
+#         # Extract the binary masks directly for your 3D point cloud
+#         if results[0].masks is not None:
+#             # Get the raw mask tensors and convert to a NumPy array
+#             raw_masks = results[0].masks.data.cpu().numpy()
 
-            print(f"Success! Found {len(raw_masks)} tool masks directly from YOLOE-26.")
-            # Proceed to resize and project onto your ROS 2 PointCloud...
-            return raw_masks[0]  # Return the first detected tool mask
-        else:
-            print("No tools found.")
-            return []  # Return the original image if no tools are found
+#             print(f"Success! Found {len(raw_masks)} tool masks directly from YOLOE-26.")
+#             # Proceed to resize and project onto your ROS 2 PointCloud...
+#             return raw_masks[0]  # Return the first detected tool mask
+#         else:
+#             print("No tools found.")
+#             return []  # Return the original image if no tools are found
