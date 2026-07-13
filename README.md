@@ -57,3 +57,14 @@ To start the main processing node, run the following command:
 
 ```bash
 ros2 run pointcloud_pub publisher
+```
+---
+### Truble shooting
+for the error "ImportError: 
+A module that was compiled using NumPy 1.x cannot be run in
+NumPy 2.5.1 as it may crash. To support both 1.x and 2.x
+versions of NumPy, modules must be compiled with NumPy 2.0.
+Some module may need to rebuild instead e.g. with 'pybind11>=2.12'."
+```bash
+pip install "numpy<2"
+```
