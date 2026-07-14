@@ -68,3 +68,7 @@ Some module may need to rebuild instead e.g. with 'pybind11>=2.12'."
 ```bash
 pip install "numpy<2"
 ```
+ModuleNotFoundError: No module named 'clip'
+```bash
+pip install git+https://github.com/ultralytics/CLIP.git
+```
