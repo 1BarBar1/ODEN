@@ -22,22 +22,23 @@ Ensure you have a working ROS 2 installation with `ament_python` support. The fo
 *   `transformers` (Hugging Face)
 *   `ultralytics` (YOLO)
 *   `Pillow` (PIL)
-## recomended pip install
+#### recomended pip install
 
 ```bash
-1. Lock setuptools and force NumPy into the 1.x branch system-wide
+# 1. Upgrade pip and core build tools first
+python3 -m pip install --break-system-packages --upgrade pip setuptools wheel
+
+# 2. Lock setuptools and force NumPy into the 1.x branch
 pip install --break-system-packages "setuptools<80" "numpy<2"
 
-# 2. Install GPU-enabled PyTorch stack
-pip install --break-system-packages torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
+# 3. Install the GPU-enabled PyTorch stack (CUDA 12.6)
+pip install --break-system-packages torch torchvision torchaudio --index-url [https://download.pytorch.org/whl/cu126](https://download.pytorch.org/whl/cu126)
 
-# 3. Install remaining pipeline requirements
+# 4. Install remaining pipeline requirements
 pip install --break-system-packages opencv-python open3d transformers ultralytics Pillow matplotlib scipy ftfy regex
-# Upgrade pip and build tools
-python3 -m pip install --upgrade pip setuptools wheel
 
-# Force reinstall CLIP without using the broken cache
-pip install --no-cache-dir git+https://github.com/ultralytics/CLIP.git
+# 5. Force install CLIP from source without using a broken cache
+pip install --break-system-packages --no-cache-dir git+[https://github.com/ultralytics/CLIP.git](https://github.com/ultralytics/CLIP.git)
 ```
 ---
 
