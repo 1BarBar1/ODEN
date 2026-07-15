@@ -26,13 +26,13 @@ Ensure you have a working ROS 2 installation with `ament_python` support. The fo
 
 ```bash
 1. Lock setuptools and force NumPy into the 1.x branch system-wide
-pip3 install --break-system-packages "setuptools<80" "numpy<2"
+pip install --break-system-packages "setuptools<80" "numpy<2"
 
 # 2. Install GPU-enabled PyTorch stack
-pip3 install --break-system-packages torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
+pip install --break-system-packages torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
 
 # 3. Install remaining pipeline requirements
-pip3 install --break-system-packages opencv-python open3d transformers ultralytics Pillow matplotlib scipy ftfy regex
+pip install --break-system-packages opencv-python open3d transformers ultralytics Pillow matplotlib scipy ftfy regex
 # Upgrade pip and build tools
 python3 -m pip install --upgrade pip setuptools wheel
 
