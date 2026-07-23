@@ -68,7 +68,9 @@ class YoloSamCombo:
         print(self.device)
 
         self.detector = YOLOWorld(
-            "/home/rosdev/ros2_ws/src/R7018E/pointcloud_pub/models/yolov8s-worldv2.pt"
+            #"/home/rosdev/ros2_ws/src/R7018E/pointcloud_pub/models/yolov8l-worldv2.pt"
+            #"/home/rosdev/ws_moveit/runs/detect/yolo_pipe_detection/finetune_yolov8l_world-2/weights/best.pt"
+            "/home/rosdev/ws_moveit/runs/detect/fyre_vision_training/finetune_yolov8l_world-2/weights/best.pt"
         )
         self.detector.set_classes(prompts)
         self.segmenter = SAM(
@@ -76,9 +78,10 @@ class YoloSamCombo:
         )
 
     def get_segmentation(self, input):
-        det_results = self.detector.predict(input, conf=0.04, device=self.device)
+        
+        det_results = self.detector.predict(input, conf=0.12
+                                            , device=self.device)
         boxes = det_results[0].boxes.xyxy
-        print(f"Detected {len(boxes)} objects with YOLOv8!")
         if len(boxes) > 0:
             print(f"Found {len(boxes)} objects! Generating crisp masks...")
 
@@ -93,8 +96,8 @@ class YoloSamCombo:
                 # Shape is (N, H, W) where N is number of detected objects
                 raw_masks = seg_results[0].masks.data.cpu().numpy()
 
-                # Grab the mask for the first detected object (e.g., the hammer)
-                first_tool_mask = raw_masks[0]
+                # Grab the mask for the first detected object (e.g., the hammer) and cast to uint8
+                first_tool_mask = raw_masks[0].astype('uint8')
 
                 # Resize the mask back to the original camera resolution
                 # CRITICAL: Use INTER_NEAREST so the edges stay strictly 0 or 1, without blurry gradients

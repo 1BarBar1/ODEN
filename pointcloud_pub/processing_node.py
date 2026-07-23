@@ -11,6 +11,9 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPo
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 import open3d as o3d
+from scipy.spatial.transform import Rotation as R
+import time as t
+from std_msgs.msg import Bool
 
 
 class ProcessingNode(Node):
@@ -30,10 +33,11 @@ class ProcessingNode(Node):
         self.po_pub = PosePublisher(node=self)
         self.K = None
 
-        self.frame = "camera_color_optical_frame"
+        self.frame = "arm_r_camera_color_optical_frame"
 
         self.color_frame = None
         self.depth_frame = None
+        self.execution_status = False
 
         # Match the Image topics (Reliable + Transient Local)
         image_qos = QoSProfile(
@@ -48,23 +52,34 @@ class ProcessingNode(Node):
             durability=DurabilityPolicy.VOLATILE,
             depth=10,
         )
+        execution_status_qos = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.VOLATILE,
+            depth=10,
+        )
         # Image subscribers (using the Transient Local profile)
         self.color_sub = Subscriber(
-            self, Image, "/camera/camera/color/image_raw", qos_profile=image_qos
+            self, Image, "/camera/arm_r_camera/color/image_raw", qos_profile=image_qos
         )
         self.depth_sub = Subscriber(
             self,
             Image,
-            "/camera/camera/aligned_depth_to_color/image_raw",
+            "/camera/arm_r_camera/aligned_depth_to_color/image_raw",
             qos_profile=image_qos,
         )
 
         # Camera Info subscriber (using the Volatile profile)
         self.info_sub = self.create_subscription(
             CameraInfo,
-            "/camera/camera/aligned_depth_to_color/camera_info",
+            "/camera/arm_r_camera/aligned_depth_to_color/camera_info",
             self.info_cb,
             info_qos,
+        )
+        self.execution_status_sub = self.create_subscription(
+            Bool,
+            "/execution_status",
+            self.execution_status_cb,
+            execution_status_qos,
         )
         self.time_sync = ApproximateTimeSynchronizer(
             [self.color_sub, self.depth_sub], queue_size=5, slop=0.05
@@ -83,7 +98,11 @@ class ProcessingNode(Node):
             self.get_logger().info(
                 "Camera info already received, ignoring further messages"
             )
-
+    def execution_status_cb(self, msg):
+        if msg is not None:
+            print("exicution!", msg.data)
+            self.execution_status = msg.data
+      
     def extract_point_clouds(
         self, depth_image, mask_grasping_object, cx, cy, fx, fy, bbox_padding=0.05
     ):
@@ -101,7 +120,7 @@ class ProcessingNode(Node):
         Z = depth_image / 1000.0
 
         # Create a mask to filter out invalid depths (Z <= 0 or Z > 6.0)
-        valid_depth = (Z > 0) & (Z <= 6.0)
+        valid_depth = (Z > 0) & (Z <= 2.0)
 
         # Calculate X and Y for the entire image simultaneously
         X = (u - cx) * Z / fx
@@ -146,7 +165,11 @@ class ProcessingNode(Node):
         if self.K is None:
             print("no K")
             return
+        if self.execution_status is True:
+            print("exicution pausing perception__________________________________________________________________________________")
+            return
         # print("Processing synchronized color and depth frames")
+        tid = t.time()
         color_frame = self.bridge.imgmsg_to_cv2(color_msg, desired_encoding="bgr8")
         depth_frame = self.bridge.imgmsg_to_cv2(
             depth_msg, desired_encoding="passthrough"
@@ -196,7 +219,7 @@ class ProcessingNode(Node):
                     print("Warning: Point cloud empty after downsampling.")
                 else:
                     eps = 0.05  # 5 centimeters
-                    min_points = 10
+                    min_points =10
                     labels = np.array(
                         grasping_object.cluster_dbscan(
                             eps=eps, min_points=min_points, print_progress=False
@@ -209,6 +232,7 @@ class ProcessingNode(Node):
                     print(f"Point cloud broken into {max_label + 1} distinct clusters.")
 
                     centroids = {}
+                    orientations = {}
 
                     for cluster_id in range(max_label + 1):
                         # Extract indices belonging exclusively to the current cluster
@@ -222,15 +246,71 @@ class ProcessingNode(Node):
 
                         # Method B: Direct mathematical mean via NumPy (Alternative)
                         cluster_points = np.asarray(cluster_pcd.points)
-                        centroid = cluster_points.mean(axis=0)
+                        surface_centroid = cluster_points.mean(axis=0)
+
+                        # Fix Surface Bias: Push centroid deeper into the pipe along the view ray
+                        view_ray = surface_centroid / np.linalg.norm(surface_centroid)
+                        pipe_radius = 0.02 # 2cm radius
+                        centroid = surface_centroid + (view_ray * pipe_radius)
 
                         centroids[cluster_id] = centroid
-                        print(
-                            f"Cluster {cluster_id}: Points = {len(cluster_indices)} | Centroid = {centroid}"
-                        )
+                        # 2. Calculate Orientation via Eigenvectors (PCA)
+                        # Center the points for this specific cluster using the surface centroid for accurate PCA
+                        centered_points = cluster_points - surface_centroid
+                        
+                        # Compute the covariance matrix
+                        cov_matrix = np.cov(centered_points.T)
+                        
+                        # Compute eigenvalues and eigenvectors
+                        eigenvalues, eigenvectors = np.linalg.eigh(cov_matrix)
+                        
+                        # Sort by eigenvalue in descending order
+                        sort_indices = np.argsort(eigenvalues)[::-1]
+                        eigenvalues = eigenvalues[sort_indices]
+                        eigenvectors = eigenvectors[:, sort_indices]
+                        
+                        # ENFORCE A RIGHT-HANDED COORDINATE SYSTEM
+                        # Eigenvectors can point in opposite directions. To use them as a valid 3D rotation 
+                        # matrix, we must ensure the cross product of the first two equals the third.
+                        # Extract the sorted eigenvectors
+                        v_largest = eigenvectors[:, 0]  # The longest dimension (the yellow arrow)
+                        v_medium = eigenvectors[:, 1]   # The second longest dimension
+
+                        # ASSIGN AXES FOR MOVEIT CYLINDER ALIGNMENT
+                        # MoveIt cylinders extend along the Z-axis, so we map the longest eigenvector to Z.
+                        z_axis = v_largest
+                        
+                        # Fix PCA Orientation Ambiguity by using a stable reference vector
+                        # Optical Z-axis points away from the camera, which is a good stable reference
+                        reference_vector = np.array([0.0, 0.0, 1.0])
+                        
+                        # Fallback if z_axis is almost parallel to reference_vector
+                        if abs(np.dot(z_axis, reference_vector)) > 0.99:
+                            reference_vector = np.array([0.0, 1.0, 0.0])
+                        
+                        # Calculate stable Y-axis
+                        y_axis = np.cross(z_axis, reference_vector)
+                        y_axis = y_axis / np.linalg.norm(y_axis)
+                        
+                        # Calculate stable X-axis to enforce right-handed coordinate system
+                        x_axis = np.cross(y_axis, z_axis)
+                        x_axis = x_axis / np.linalg.norm(x_axis)
+
+                        # Reconstruct the valid rotation matrix stacking X, Y, Z columns
+                        rotation_matrix = np.column_stack((x_axis, y_axis, z_axis))
+                        
+                        # 1. Convert the 3x3 rotation matrix to a Scipy Rotation object
+                        rotation = R.from_matrix(rotation_matrix)
+                        
+                        # 2. Extract the quaternion
+                        quaternion = rotation.as_quat()
+
+                        orientations[cluster_id] = quaternion
+
+                        print(f"Cluster {cluster_id}: Points = {len(cluster_indices)} | Centroid = {centroid} | orinetations = {orientations}")
                     grasping_object_array = np.asarray(grasping_object.points)
                     grasping_object_array = np.column_stack(
-                        (grasping_object_np, np.ones(grasping_object_np.shape[0]))
+                        (np.asarray(grasping_object.points), np.ones(len(grasping_object.points)))
                     )
                     environment_array = np.asarray(environment.points)
                     environment_array = np.column_stack(
@@ -243,26 +323,31 @@ class ProcessingNode(Node):
                         )
                         msg_grasping_object = (
                             self.pc_grasping_object_pub.create_pointcloud2(
-                                grasping_object_array, self.frame
+                                points=grasping_object_array, 
+                                header=depth_msg.header  # Force keyword arguments
                             )
                         )
                         self.pc_grasping_object_pub.publisher.publish(
                             msg_grasping_object
                         )
+                        
                     if environment_array.size > 0:
                         self.get_logger().info(
                             f"Publishing environment point cloud with {environment_array.shape[0]} points."
                         )
                         msg_env = self.pc_environment_pub.create_pointcloud2(
-                            environment_array, self.frame
+                            points=environment_array, 
+                            header=depth_msg.header  # Fixed 'dheader' and 'pc_msg'
                         )
                         self.pc_environment_pub.publisher.publish(msg_env)
+                        
                     if len(centroids) > 0:
-                        msg_pose = self.po_pub.create_pose_array(centroids, self.frame)
+                        # You might also want to use keyword arguments here if this fails!
+                        msg_pose = self.po_pub.create_pose_array(centroids, orientations, depth_msg.header)
                         self.po_pub.publisher.publish(msg_pose)
-            except Exception as e:
+            except OverflowError as e:
                 print("mask error")
-
+        print("tiden tagen: ", t.time()-tid)
         self.color_frame = None
         self.depth_frame = None
 
@@ -270,7 +355,15 @@ class ProcessingNode(Node):
 def main(args=None):
     print("Starting processing node...")
 
-    seg_grasping_object = YoloSamCombo(["brick", "object", "tool", "box", ""])
+    seg_grasping_object = YoloSamCombo([
+    "plastic-pipe",
+    "pipe-insulated",
+    "metal-pipe",
+    "yellow folding ruler",
+    #"hammer with black handle", 
+    "red rectangular block",
+    "chair leg" # Keep the distractor just in case
+    ])
     seg_obstacle = None
 
     rclpy.init(args=args)

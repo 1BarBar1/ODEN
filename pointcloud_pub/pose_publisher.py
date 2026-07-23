@@ -8,38 +8,41 @@ from std_msgs.msg import Header
 
 class PosePublisher(Node):
     def __init__(self, node):
-        self.publisher = node.create_publisher(PoseArray, 'pose_topic', 10)
+        self.publisher = node.create_publisher(PoseArray, 'poses', 10)
 
-    def create_pose_array(self, points, frame):
+    def create_pose_array(self, centroids, orientations, header): # <-- Change argument to header
+        
         """
-        points: numpy array of shape (n,3) or (n,4)
+        centroids: numpy array of shape (n,3) or (n,4)
         columns: [x,y,z,(optional class)]
         """
 
-        print("values of centroids:", points.values())
+        print("values of centroids:", centroids.values())
 
-        # Ensure points is a 2D array
-        points = np.asarray(list(points.values()), dtype=np.float32)
-        assert points.ndim == 2, f"points must be 2D, got {points.ndim}D"
+        # Ensure centroids is a 2D array
+        centroids = np.asarray(list(centroids.values()), dtype=np.float32)
+        assert centroids.ndim == 2, f"centroids must be 2D, got {centroids.ndim}D"
 
         msg = PoseArray()
-        msg.header = Header()
-        msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = frame
-
-        for row in points:
-            x, y, z = row[:3]  # ignore the class column
-
+        msg.header = header
+        print(range(centroids.shape[0]))
+        for cluster_id in range(centroids.shape[0]):
+            print(cluster_id)
+            centroid = centroids[cluster_id]
+            quaternion = orientations[cluster_id]
+            
             pose = Pose()
-            pose.position.x = float(x)
-            pose.position.y = float(y)
-            pose.position.z = float(z)
+            
+            # Centroid is a 1D array: [x, y, z]
+            pose.position.x = float(centroid[0])
+            pose.position.y = float(centroid[1])
+            pose.position.z = float(centroid[2])
 
-            # neutral orientation
-            pose.orientation.x = 0.0
-            pose.orientation.y = 0.0
-            pose.orientation.z = 0.0
-            pose.orientation.w = 1.0
+            # Quaternion is a 1D array: [x, y, z, w]
+            pose.orientation.x = float(quaternion[0])
+            pose.orientation.y = float(quaternion[1])
+            pose.orientation.z = float(quaternion[2])
+            pose.orientation.w = float(quaternion[3])
 
             msg.poses.append(pose)
 

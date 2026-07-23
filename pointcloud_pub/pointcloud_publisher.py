@@ -1,5 +1,7 @@
 from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2
+from sensor_msgs.msg import PointField
+from std_msgs.msg import Header
 import rclpy
 import numpy as np
 
@@ -8,9 +10,8 @@ class PointCloudPublisher(Node):
     def __init__(self, node: Node, topic_name: str):
         self.publisher = node.create_publisher(PointCloud2, topic_name, 10)
 
-    def create_pointcloud2(self, points, frame):
-        from sensor_msgs.msg import PointField
-        from std_msgs.msg import Header
+    def create_pointcloud2(self, points, header):
+       
 
         # 1. CHANGE THIS to expect 4 columns (x, y, z, class)
         assert points.ndim == 2 and points.shape[1] == 4
@@ -19,12 +20,10 @@ class PointCloudPublisher(Node):
         points = np.ascontiguousarray(points)
 
         msg = PointCloud2()
-        msg.header = Header()
-        msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = frame
+        msg.header = header
 
         msg.height = 1
-        msg.width = points.shape[0]
+        msg.width = len(points)
 
         # 4 fields * 4 bytes = 16 bytes per point
         msg.fields = [
