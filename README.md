@@ -28,9 +28,6 @@ Ensure you have a working ROS 2 installation with `ament_python` support. The fo
 # 1. Upgrade pip and core build tools first
 python3 -m pip install --break-system-packages --upgrade pip setuptools wheel
 
-# 2. Lock setuptools and force NumPy into the 1.x branch
-pip install --break-system-packages "setuptools<80" "numpy<2"
-
 # 3. Install the GPU-enabled PyTorch stack (CUDA 12.6)
 pip install --break-system-packages torch torchvision torchaudio --index-url [https://download.pytorch.org/whl/cu126](https://download.pytorch.org/whl/cu126)
 
@@ -39,6 +36,9 @@ pip install --break-system-packages opencv-python open3d transformers ultralytic
 
 # 5. Force install CLIP from source without using a broken cache
 pip install --break-system-packages --no-cache-dir git+[https://github.com/ultralytics/CLIP.git](https://github.com/ultralytics/CLIP.git)
+
+# 2. Lock setuptools and force NumPy into the 1.x branch
+pip install --break-system-packages "setuptools<80" "numpy<2"
 ```
 ---
 
