@@ -35,7 +35,7 @@ pip install torch torchvision torchaudio --extra-index-url https://download.pyto
 pip install opencv-python open3d transformers ultralytics Pillow matplotlib scipy ftfy regex
 
 # 5. Force install CLIP from source without using a broken cache
-pip install --no-cache-dir git+[https://github.com/ultralytics/CLIP.git](https://github.com/ultralytics/CLIP.git)
+pip install --no-cache-dir git+https://github.com/ultralytics/CLIP.git
 
 # 2. Lock setuptools and force NumPy into the 1.x branch
 pip install "setuptools<80" "numpy<2"
