@@ -29,7 +29,7 @@ Ensure you have a working ROS 2 installation with `ament_python` support. The fo
 python3 -m pip install --upgrade pip setuptools wheel
 
 # 3. Install the GPU-enabled PyTorch stack (CUDA 12.6)
-pip install torch torchvision torchaudio --index-url [https://download.pytorch.org/whl/cu126](https://download.pytorch.org/whl/cu126)
+pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu126
 
 # 4. Install remaining pipeline requirements
 pip install opencv-python open3d transformers ultralytics Pillow matplotlib scipy ftfy regex
