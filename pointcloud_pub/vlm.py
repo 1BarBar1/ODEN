@@ -70,7 +70,7 @@ class YoloSamCombo:
         self.detector = YOLOWorld(
             #"/home/rosdev/ros2_ws/src/R7018E/pointcloud_pub/models/yolov8l-worldv2.pt"
             #"/home/rosdev/ws_moveit/runs/detect/yolo_pipe_detection/finetune_yolov8l_world-2/weights/best.pt"
-            "/home/rosdev/ws_moveit/runs/detect/fyre_vision_training/finetune_yolov8l_world-2/weights/best.pt"
+            "src/R7018E/pointcloud_pub/models/best.pt"
         )
         self.detector.set_classes(prompts)
         self.segmenter = SAM(
@@ -86,7 +86,7 @@ class YoloSamCombo:
             print(f"Found {len(boxes)} objects! Generating crisp masks...")
 
             # Feed those exact boxes into SAM
-            seg_results = self.segmenter.predict(input, bboxes=boxes, device="cpu")
+            seg_results = self.segmenter.predict(input, bboxes=boxes, device=self.device)
 
             if seg_results[0].masks is not None:
                 #cGet the original camera image dimensions (Height, Width)
