@@ -74,7 +74,7 @@ class YoloSamCombo:
         )
         self.detector.set_classes(prompts)
         self.segmenter = SAM(
-            "/home/rosdev/ros2_ws/src/R7018E/pointcloud_pub/models/mobile_sam.pt"
+            "src/R7018E/pointcloud_pub/models/mobile_sam.pt"
         )
 
     def get_segmentation(self, input):
