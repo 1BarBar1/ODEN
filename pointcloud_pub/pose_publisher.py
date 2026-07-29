@@ -25,8 +25,9 @@ class PosePublisher(Node):
 
         msg = PoseArray()
         msg.header = header
-        print(range(centroids.shape[0]))
+        #print(range(centroids.shape[0]))
         for cluster_id in range(centroids.shape[0]):
+
             print(cluster_id)
             centroid = centroids[cluster_id]
             quaternion = orientations[cluster_id]
@@ -45,5 +46,6 @@ class PosePublisher(Node):
             pose.orientation.w = float(quaternion[3])
 
             msg.poses.append(pose)
+            
 
         return msg

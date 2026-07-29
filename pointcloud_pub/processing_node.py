@@ -234,7 +234,16 @@ class ProcessingNode(Node):
                     centroids = {}
                     orientations = {}
 
+                    # Calculate the size of each cluster
+                    cluster_sizes = []
                     for cluster_id in range(max_label + 1):
+                        size = np.sum(labels == cluster_id)
+                        cluster_sizes.append((cluster_id, size))
+                    
+                    # Sort the clusters based on size (descending order)
+                    cluster_sizes.sort(key=lambda x: x[1], reverse=True)
+
+                    for cluster_id, size in cluster_sizes:
                         # Extract indices belonging exclusively to the current cluster
                         cluster_indices = np.where(labels == cluster_id)[0]
 
