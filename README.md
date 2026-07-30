@@ -1,3 +1,5 @@
+## ODEN
+### Object Detection & Estimation Nodes
 The `pointcloud_pub` package is a ROS 2 Python package designed to process synchronized color and depth camera feeds to segment specific objects and generate 3D spatial data. By leveraging advanced Vision-Language Models (VLMs) and object detection architectures, this package extracts isolated point clouds for target objects, computes their 3D cluster centroids, and separates the remaining environment into a distinct point cloud.
 
 ### Key Features
