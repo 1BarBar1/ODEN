@@ -1,7 +1,7 @@
-from pointcloud_pub.vlm import Clipseg, YoloSamCombo, Yolo26e
+from oden.vlm import Clipseg, YoloSamCombo, Yolo26e
 import numpy as np
-from pointcloud_pub.pointcloud_publisher import PointCloudPublisher
-from pointcloud_pub.pose_publisher import PosePublisher
+from oden.pointcloud_publisher import PointCloudPublisher
+from oden.pose_publisher import PosePublisher
 from message_filters import Subscriber, ApproximateTimeSynchronizer
 from sensor_msgs.msg import CameraInfo
 import rclpy

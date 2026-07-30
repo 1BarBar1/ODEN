@@ -68,13 +68,13 @@ class YoloSamCombo:
         print(self.device)
 
         self.detector = YOLOWorld(
-            #"/home/rosdev/ros2_ws/src/R7018E/pointcloud_pub/models/yolov8l-worldv2.pt"
+            #"/home/rosdev/ros2_ws/src/oden/oden/models/yolov8l-worldv2.pt"
             #"/home/rosdev/ws_moveit/runs/detect/yolo_pipe_detection/finetune_yolov8l_world-2/weights/best.pt"
-            "src/R7018E/pointcloud_pub/models/best.pt"
+            "src/oden/oden/models/best.pt"
         )
         self.detector.set_classes(prompts)
         self.segmenter = SAM(
-            "src/R7018E/pointcloud_pub/models/mobile_sam.pt"
+            "src/oden/oden/models/mobile_sam.pt"
         )
 
     def get_segmentation(self, input):
@@ -170,7 +170,7 @@ class Yolo26e:
 #         self.yolo_model = YOLO("yolo26n.pt")
 
 #         self.segmenter = SAM(
-#             "/home/rosdev/ros2_ws/src/R7018E/pointcloud_pub/models/mobile_sam.pt"
+#             "/home/rosdev/ros2_ws/src/oden/oden/models/mobile_sam.pt"
 #         )
 #         messages = [
 #             {

@@ -1,6 +1,6 @@
 from setuptools import setup
 
-package_name = 'pointcloud_pub'
+package_name = 'oden'
 
 setup(
     name=package_name,
@@ -8,13 +8,13 @@ setup(
     packages=[package_name],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='your_name',
-    maintainer_email='your@email.com',
-    description='PointCloud2 publisher',
+    maintainer='Harry Grehag',
+    maintainer_email='harygrehag@gmail.com',
+    description='Object detection and Estimation Nodes',
     license='Apache License 2.0',
     entry_points={
         'console_scripts': [
-            'publisher = pointcloud_pub.processing_node:main',
+            'publisher = oden.processing_node:main',
 
         ],
     },
