@@ -1,6 +1,6 @@
 ## ODEN
 ### Object Detection & Estimation Nodes
-The `pointcloud_pub` package is a ROS 2 Python package designed to process synchronized color and depth camera feeds to segment specific objects and generate 3D spatial data. By leveraging advanced Vision-Language Models (VLMs) and object detection architectures, this package extracts isolated point clouds for target objects, computes their 3D cluster centroids, and separates the remaining environment into a distinct point cloud.
+The `oden` package is a ROS 2 Python package designed to process synchronized color and depth camera feeds to segment specific objects and generate 3D spatial data. By leveraging advanced Vision-Language Models (VLMs) and object detection architectures, this package extracts isolated point clouds for target objects, computes their 3D cluster centroids, and separates the remaining environment into a distinct point cloud.
 
 ### Key Features
 
@@ -54,7 +54,7 @@ pip install "setuptools<80" "numpy<2"
     *Note: If using the YOLO+SAM combination, ensure that `yolov8s-worldv2.pt` and `mobile_sam.pt` are correctly placed in the `models/` directory as referenced in `vlm.py`*.
 3.  **Build the package** from the root of your workspace using `colcon`:
     ```bash
-    colcon build --packages-select pointcloud_pub
+    colcon build --packages-select oden
     ```
 4.  **Source the setup file**:
     ```bash
@@ -75,7 +75,7 @@ The aligened depth is impotant for accuressy to the real world!
 To start the main processing node, run the following command:
 
 ```bash
-ros2 run pointcloud_pub publisher
+ros2 run oden publisher
 ```
 ---
 ### Truble shooting
